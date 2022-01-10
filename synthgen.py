@@ -6,21 +6,25 @@ Main script for synthetic text rendering.
 """
 
 from __future__ import division
+
 import copy
+import itertools
+import os.path as osp
+import traceback
+
 import cv2
 import h5py
-from PIL import Image
-import numpy as np 
 #import mayavi.mlab as mym
-import matplotlib.pyplot as plt 
-import os.path as osp
+import matplotlib.pyplot as plt
+import numpy as np
 import scipy.ndimage as sim
 import scipy.spatial.distance as ssd
+from PIL import Image
+
 import synth_utils as su
 import text_utils as tu
 from colorize3_poisson import Colorize
 from common import *
-import traceback, itertools
 
 
 class TextRegions(object):
@@ -501,7 +505,7 @@ class RendererV3(object):
         if render_res is None: # rendering not successful
             return #None
         else:
-            text_mask,loc,bb,text = render_res
+            text_mask,loc,bb,text, font = render_res
 
         # update the collision mask with text:
         collision_mask += (255 * (text_mask>0)).astype('uint8')
@@ -524,7 +528,7 @@ class RendererV3(object):
 
         im_final = self.colorizer.color(rgb,[text_mask],np.array([min_h]))
 
-        return im_final, text, bb, collision_mask
+        return im_final, text, bb, collision_mask, font
 
 
     def get_num_text_regions(self, nregions):
@@ -630,7 +634,7 @@ class RendererV3(object):
 
             print (colorize(Color.CYAN, " ** instance # : %d"%i))
 
-            idict = {'img':[], 'charBB':None, 'wordBB':None, 'txt':None}
+            idict = {'img':[], 'charBB':None, 'wordBB':None, 'txt':None, 'font': None}
 
             m = self.get_num_text_regions(nregions)#np.arange(nregions)#min(nregions, 5*ninstance*self.max_text_regions))
             reg_idx = np.arange(min(2*m,nregions))
@@ -641,6 +645,7 @@ class RendererV3(object):
             img = rgb.copy()
             itext = []
             ibb = []
+            ifont = []
 
             # process regions: 
             num_txt_regions = len(reg_idx)
@@ -654,10 +659,9 @@ class RendererV3(object):
                                                          regions['homography'][ireg],
                                                          regions['homography_inv'][ireg])
                     else:
-                        with time_limit(self.max_time):
-                            txt_render_res = self.place_text(img,place_masks[ireg],
-                                                             regions['homography'][ireg],
-                                                             regions['homography_inv'][ireg])
+                        txt_render_res = self.place_text(img,place_masks[ireg],
+                                                            regions['homography'][ireg],
+                                                            regions['homography_inv'][ireg])
                 except TimeoutException as msg:
                     print (msg)
                     continue
@@ -668,12 +672,13 @@ class RendererV3(object):
 
                 if txt_render_res is not None:
                     placed = True
-                    img,text,bb,collision_mask = txt_render_res
+                    img,text,bb,collision_mask,font = txt_render_res
                     # update the region collision mask:
                     place_masks[ireg] = collision_mask
                     # store the result:
                     itext.append(text)
                     ibb.append(bb)
+                    ifont += [bytes(font, 'utf-8') for _ in range(len(text))]
 
             if  placed:
                 # at least 1 word was placed in this instance:
@@ -681,6 +686,7 @@ class RendererV3(object):
                 idict['txt'] = itext
                 idict['charBB'] = np.concatenate(ibb, axis=2)
                 idict['wordBB'] = self.char2wordBB(idict['charBB'].copy(), ' '.join(itext))
+                idict['font'] = ifont
                 res.append(idict.copy())
                 if viz:
                     viz_textbb(1,img, [idict['wordBB']], alpha=1.0)

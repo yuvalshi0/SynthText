@@ -1,21 +1,27 @@
 from __future__ import division
-import numpy as np
-import matplotlib.pyplot as plt 
-import scipy.io as sio
+
+import math
+import os
 import os.path as osp
-import random, os
-import cv2
+import pickle
+import random
+
 #import cPickle as cp
 import _pickle as cp
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import pygame
+import pygame.locals
+import scipy.io as sio
 import scipy.signal as ssig
 import scipy.stats as sstat
-import pygame, pygame.locals
-from pygame import freetype
 #import Image
 from PIL import Image
-import math
+from pygame import freetype
+
 from common import *
-import pickle
+
 
 def sample_weighted(p_dict):
     ps = list(p_dict.keys())
@@ -83,9 +89,9 @@ class RenderFont(object):
     def __init__(self, data_dir='data'):
         # distribution over the type of text:
         # whether to get a single word, paragraph or a line:
-        self.p_text = {0.0 : 'WORD',
+        self.p_text = {1.0 : 'WORD',
                        0.0 : 'LINE',
-                       1.0 : 'PARA'}
+                       0.0 : 'PARA'}
 
         ## TEXT PLACEMENT PARAMETERS:
         self.f_shrink = 0.90
@@ -381,7 +387,7 @@ class RenderFont(object):
             # position the text within the mask:
             text_mask,loc,bb, _ = self.place_text([txt_arr], mask, [bb])
             if len(loc) > 0:#successful in placing the text collision-free:
-                return text_mask,loc[0],bb[0],text
+                return text_mask,loc[0],bb[0],text, font.name
         return #None
 
 
@@ -436,6 +442,7 @@ class FontState(object):
         # get the names of fonts to use:
         self.FONT_LIST = osp.join(data_dir, 'fonts/fontlist.txt')
         self.fonts = [os.path.join(data_dir,'fonts',f.strip()) for f in open(self.FONT_LIST)]
+
 
 
     def get_aspect_ratio(self, font, size=None):

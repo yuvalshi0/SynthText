@@ -12,6 +12,7 @@ Entry-point for generating synthetic text images, as described in:
     }
 """
 
+import copy
 import os
 import os.path as osp
 import pickle
@@ -21,6 +22,7 @@ import traceback
 
 import h5py
 import numpy as np
+import psutil
 import wget
 
 from common import *
@@ -36,12 +38,12 @@ DATA_PATH = 'data'
 DB_FNAME = osp.join(DATA_PATH,'dset.h5')
 # url of the data (google-drive public file):
 DATA_URL = 'http://www.robots.ox.ac.uk/~ankush/data.tar.gz'
-OUT_FILE = r""
+OUT_FILE = r'D:\results\SynthText_2000.h5'
 
-IMG_DIR = r""
-DEPTH_FILE = r""
-SEG_FILE = r""
-INNAMES_FILE = r""
+IMG_DIR = r"D:\images\bg_img"
+DEPTH_FILE = r"D:\images\depth.h5"
+SEG_FILE = r"D:\images\seg.h5"
+INNAMES_FILE = r"D:\images\imnames.cp"
 
 def get_data():
   """
@@ -80,6 +82,7 @@ def add_res_to_db(imgname,res,db):
     db['data'].create_dataset(dname,data=res[i]['img'])
     db['data'][dname].attrs['charBB'] = res[i]['charBB']
     db['data'][dname].attrs['wordBB'] = res[i]['wordBB']        
+    db['data'][dname].attrs['font'] = res[i]['font']        
     #db['data'][dname].attrs['txt'] = res[i]['txt']
     L = res[i]['txt']
     L = [n.encode("ascii", "ignore") for n in L]
@@ -102,22 +105,21 @@ def main(viz=False):
   im_dir = IMG_DIR
   depth_db = h5py.File(DEPTH_FILE,'r')
   seg_db = h5py.File(SEG_FILE,'r')
-
   imnames = sorted(depth_db.keys())
-
   with open(INNAMES_FILE, 'rb') as f:
     filtered_imnames = set(pickle.load(f))
   i = 0
   end_idx = len(imnames)
-  for imname in imnames:
+  for imname in imnames[:2000]:
 
     try:
     # ignore if not in filetered list:
       if imname not in filtered_imnames: continue
     
       # get the colour image:
-      img_ = Image.open(osp.join(im_dir, imname)).convert('RGB')
-      
+      tmp = Image.open(osp.join(im_dir, imname))
+      img_ = tmp.convert('RGB').copy()
+      tmp.close()
       # get depth:
       depth = depth_db[imname][:].T
       depth = depth[:,:,0]
@@ -138,16 +140,17 @@ def main(viz=False):
         # non-empty : successful in placing text:
         add_res_to_db(imname,res,out_db)
       # visualize the output:
+
+      img_.close()
       if viz:
         if 'q' in input(colorize(Color.RED,'continue? (enter to continue, q to exit): ',True)):
           break
       i+=1
     except:
-      traceback.print_exc()
+      with open("errors", "a") as errf:
+        traceback.print_exc(file=errf)
       print (colorize(Color.GREEN,'>>>> CONTINUING....', bold=True))
       continue
-    finally:
-      img_.close()
   seg_db.close()
   depth_db.close()
   out_db.close()
