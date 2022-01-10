@@ -36,7 +36,7 @@ DATA_PATH = 'data'
 DB_FNAME = osp.join(DATA_PATH,'dset.h5')
 # url of the data (google-drive public file):
 DATA_URL = 'http://www.robots.ox.ac.uk/~ankush/data.tar.gz'
-OUT_FILE = r'D:\results\SynthText.h5'
+OUT_FILE = r""
 
 IMG_DIR = r""
 DEPTH_FILE = r""
@@ -116,7 +116,7 @@ def main(viz=False):
       if imname not in filtered_imnames: continue
     
       # get the colour image:
-      img = Image.open(osp.join(im_dir, imname)).convert('RGB')
+      img_ = Image.open(osp.join(im_dir, imname)).convert('RGB')
       
       # get depth:
       depth = depth_db[imname][:].T
@@ -129,7 +129,7 @@ def main(viz=False):
 
       # re-size uniformly:
       sz = depth.shape[:2][::-1]
-      img = np.array(img.resize(sz,Image.ANTIALIAS))
+      img = np.array(img_.resize(sz,Image.ANTIALIAS))
       seg = np.array(Image.fromarray(seg).resize(sz,Image.NEAREST))
       print (colorize(Color.RED,'%d of %d'%(i,end_idx-1), bold=True))
       res = RV3.render_text(img,depth,seg,area,label,
@@ -146,6 +146,8 @@ def main(viz=False):
       traceback.print_exc()
       print (colorize(Color.GREEN,'>>>> CONTINUING....', bold=True))
       continue
+    finally:
+      img_.close()
   seg_db.close()
   depth_db.close()
   out_db.close()
