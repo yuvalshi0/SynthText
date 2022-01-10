@@ -12,14 +12,19 @@ Entry-point for generating synthetic text images, as described in:
     }
 """
 
-import numpy as np
-import h5py
-import os, sys, traceback
+import os
 import os.path as osp
-from synthgen import *
-from common import *
-import wget, tarfile
+import pickle
+import sys
+import tarfile
+import traceback
 
+import h5py
+import numpy as np
+import wget
+
+from common import *
+from synthgen import *
 
 ## Define some configuration variables:
 NUM_IMG = -1 # no. of images to use for generation (-1 to use all available):
@@ -31,7 +36,12 @@ DATA_PATH = 'data'
 DB_FNAME = osp.join(DATA_PATH,'dset.h5')
 # url of the data (google-drive public file):
 DATA_URL = 'http://www.robots.ox.ac.uk/~ankush/data.tar.gz'
-OUT_FILE = 'results/SynthText.h5'
+OUT_FILE = r'D:\results\SynthText.h5'
+
+IMG_DIR = r""
+DEPTH_FILE = r""
+SEG_FILE = r""
+INNAMES_FILE = r""
 
 def get_data():
   """
@@ -79,7 +89,7 @@ def add_res_to_db(imgname,res,db):
 def main(viz=False):
   # open databases:
   print (colorize(Color.BLUE,'getting data..',bold=True))
-  db = get_data()
+  #db = get_data()
   print (colorize(Color.BLUE,'\t-> done',bold=True))
 
   # open the output h5 file:
@@ -87,36 +97,40 @@ def main(viz=False):
   out_db.create_group('/data')
   print (colorize(Color.GREEN,'Storing the output in: '+OUT_FILE, bold=True))
 
-  # get the names of the image files in the dataset:
-  imnames = sorted(db['image'].keys())
-  N = len(imnames)
-  global NUM_IMG
-  if NUM_IMG < 0:
-    NUM_IMG = N
-  start_idx,end_idx = 0,min(NUM_IMG, N)
 
   RV3 = RendererV3(DATA_PATH,max_time=SECS_PER_IMG)
-  for i in range(start_idx,end_idx):
-    imname = imnames[i]
+  im_dir = IMG_DIR
+  depth_db = h5py.File(DEPTH_FILE,'r')
+  seg_db = h5py.File(SEG_FILE,'r')
+
+  imnames = sorted(depth_db.keys())
+
+  with open(INNAMES_FILE, 'rb') as f:
+    filtered_imnames = set(pickle.load(f))
+  i = 0
+  end_idx = len(imnames)
+  for imname in imnames:
+
     try:
-      # get the image:
-      img = Image.fromarray(db['image'][imname][:])
-      # get the pre-computed depth:
-      #  there are 2 estimates of depth (represented as 2 "channels")
-      #  here we are using the second one (in some cases it might be
-      #  useful to use the other one):
-      depth = db['depth'][imname][:].T
-      depth = depth[:,:,1]
-      # get segmentation:
-      seg = db['seg'][imname][:].astype('float32')
-      area = db['seg'][imname].attrs['area']
-      label = db['seg'][imname].attrs['label']
+    # ignore if not in filetered list:
+      if imname not in filtered_imnames: continue
+    
+      # get the colour image:
+      img = Image.open(osp.join(im_dir, imname)).convert('RGB')
+      
+      # get depth:
+      depth = depth_db[imname][:].T
+      depth = depth[:,:,0]
+
+      # get segmentation info:
+      seg = seg_db['mask'][imname][:].astype('float32')
+      area = seg_db['mask'][imname].attrs['area']
+      label = seg_db['mask'][imname].attrs['label']
 
       # re-size uniformly:
       sz = depth.shape[:2][::-1]
       img = np.array(img.resize(sz,Image.ANTIALIAS))
       seg = np.array(Image.fromarray(seg).resize(sz,Image.NEAREST))
-
       print (colorize(Color.RED,'%d of %d'%(i,end_idx-1), bold=True))
       res = RV3.render_text(img,depth,seg,area,label,
                             ninstance=INSTANCE_PER_IMAGE,viz=viz)
@@ -127,11 +141,13 @@ def main(viz=False):
       if viz:
         if 'q' in input(colorize(Color.RED,'continue? (enter to continue, q to exit): ',True)):
           break
+      i+=1
     except:
       traceback.print_exc()
       print (colorize(Color.GREEN,'>>>> CONTINUING....', bold=True))
       continue
-  db.close()
+  seg_db.close()
+  depth_db.close()
   out_db.close()
 
 
